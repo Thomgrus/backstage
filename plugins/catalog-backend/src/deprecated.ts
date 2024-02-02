@@ -57,6 +57,8 @@ import {
   type DefaultCatalogCollatorFactoryOptions as _DefaultCatalogCollatorFactoryOptions,
 } from '@backstage/plugin-search-backend-module-catalog';
 
+export { BuiltinKindsEntityProcessor } from './modules';
+
 /**
  * @public
  * @deprecated import from `@backstage/plugin-catalog-node` instead
