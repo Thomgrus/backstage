@@ -1,5 +1,3 @@
 # @backstage/plugin-catalog-backend-module-system-entity-model
 
-The system-entity-model backend module for the catalog plugin.
-
-_This plugin was created through the Backstage CLI_
+Implements the [default System Entity Model](https://backstage.io/docs/features/software-catalog/descriptor-format) for the catalog backend.
