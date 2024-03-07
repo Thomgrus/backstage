@@ -31,6 +31,71 @@ import {
 } from '@backstage/plugin-techdocs-react';
 import { EventSourcePolyfill } from 'event-source-polyfill';
 
+const EXPIRES_AT_STORAGE_KEY = 'backstage-techdocs-cookie-expires-at';
+
+class CrossTabTimeout {
+  private id: number | undefined;
+  private delay: number;
+  private callback: Function;
+  private readonly tab: string;
+  private readonly channel = new BroadcastChannel(
+    'backstage-techdocs-cookie-refresh',
+  );
+
+  private constructor(options: { delay: number; callback: Function }) {
+    this.delay = options.delay;
+    this.callback = options.callback;
+    // Unique identifier for this tab
+    this.tab = `${Date.now()} - ${Math.random()}`;
+
+    // Listen for messages from the broadcast channel
+    this.channel.onmessage = event => {
+      const { command, senderTabId } = event.data;
+      if (command === 'activate-tab' && senderTabId !== this.tab) {
+        // Another tab has become active, cancel the timeout in this tab
+        this.manageTimeout(false);
+      }
+    };
+
+    // Using the Visibility API to detect when the tab becomes active
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        this.broadcastActivation();
+      }
+    });
+
+    // Initial activation in case this tab is the first or only one open
+    this.broadcastActivation();
+  }
+
+  static create(options: { delay: number; callback: Function }) {
+    return new CrossTabTimeout(options);
+  }
+
+  private manageTimeout(start: boolean) {
+    clearTimeout(this.id);
+    if (start) {
+      this.id = setTimeout(this.callback, this.delay);
+    } else {
+      this.id = undefined;
+    }
+  }
+
+  private broadcastActivation() {
+    this.channel.postMessage({
+      command: 'activate-tab',
+      senderTabId: this.tab,
+    });
+    // Ensure this tab starts its timeout after broadcasting
+    this.manageTimeout(true);
+  }
+
+  update(delay: number) {
+    this.delay = delay;
+    this.manageTimeout(true);
+  }
+}
+
 /**
  * API to talk to `techdocs-backend`.
  *
@@ -40,7 +105,7 @@ export class TechDocsClient implements TechDocsApi {
   public configApi: Config;
   public discoveryApi: DiscoveryApi;
   private fetchApi: FetchApi;
-  private cookieRefreshTimeoutId: NodeJS.Timeout | undefined;
+  private timeout: CrossTabTimeout | undefined;
 
   constructor(options: {
     configApi: Config;
@@ -50,6 +115,14 @@ export class TechDocsClient implements TechDocsApi {
     this.configApi = options.configApi;
     this.discoveryApi = options.discoveryApi;
     this.fetchApi = options.fetchApi;
+  }
+
+  set expiresAt(value: string) {
+    localStorage.setItem(EXPIRES_AT_STORAGE_KEY, value);
+  }
+
+  get expiresAt(): string | null {
+    return localStorage.getItem(EXPIRES_AT_STORAGE_KEY);
   }
 
   private async getCookie(): Promise<{ expiresAt: string }> {
@@ -64,42 +137,33 @@ export class TechDocsClient implements TechDocsApi {
     return await response.json();
   }
 
-  public async issueUserCookie(): Promise<{ expiresAt: string }> {
-    const expiresAtStorageKey = 'backstage-auth-cookie-last-refresh-expires-at';
-    const formatedExpiresAt = localStorage.getItem(expiresAtStorageKey);
-    const expiresAt = formatedExpiresAt ? new Date(formatedExpiresAt) : null;
+  private refreshUserCookie(options: { expiresAt: string }) {
+    const fiveMinutes = 300000;
+    const { expiresAt } = options;
+    // ask for new tokens a couple of minutes before the expiry
+    const delay = Date.parse(expiresAt) - Date.now() - fiveMinutes;
+    if (this.timeout) {
+      this.timeout.update(delay);
+    } else {
+      const callback = () => this.issueUserCookie({ force: true });
+      this.timeout = CrossTabTimeout.create({ delay, callback });
+    }
+    return { expiresAt };
+  }
 
-    // get a new cookie if it doesn't exist or has expired
-    if (
-      // first time issuing a cookie or user deleted the stored expiration date
-      !expiresAt ||
-      // the application was reloaded and the cookie was not refreshed
-      expiresAt.getTime() < Date.now()
-    ) {
-      return this.getCookie().then(response => {
-        const newExpiresAt = new Date(response.expiresAt);
-        // refresh the cookie 5 minutes before it expires
-        newExpiresAt.setMinutes(newExpiresAt.getMinutes() - 5);
-        // store the expiration date to keep it even if the application is reloaded
-        localStorage.setItem(expiresAtStorageKey, newExpiresAt.toISOString());
-        // maintain the timeout id per tab instance so we know that there is a timeout running
-        this.cookieRefreshTimeoutId = setTimeout(
-          this.issueUserCookie,
-          newExpiresAt.getTime(),
-        );
-        return { expiresAt: newExpiresAt.toISOString() };
+  public async issueUserCookie(
+    options: {
+      force?: boolean;
+    } = {},
+  ): Promise<{ expiresAt: string }> {
+    const { force } = options;
+    if (force || !this.expiresAt || Date.parse(this.expiresAt) < Date.now()) {
+      return this.getCookie().then(({ expiresAt }) => {
+        this.expiresAt = expiresAt;
+        return this.refreshUserCookie({ expiresAt });
       });
     }
-
-    // restart timeout when the cookie is still valid but the application was reloaded
-    if (!this.cookieRefreshTimeoutId) {
-      this.cookieRefreshTimeoutId = setTimeout(
-        this.issueUserCookie,
-        expiresAt.getTime(),
-      );
-    }
-
-    return { expiresAt: expiresAt.toISOString() };
+    return this.refreshUserCookie({ expiresAt: this.expiresAt });
   }
 
   async getApiOrigin(): Promise<string> {
