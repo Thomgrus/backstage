@@ -1,5 +1,17 @@
 # @backstage/plugin-scaffolder-node-test-utils
 
+## 0.1.0-next.2
+
+### Patch Changes
+
+- 563dfd0: Fix issue with package bundling, should be `dist/index.cjs.js` instead of `dist/index.esm.js`.
+- Updated dependencies
+  - @backstage/backend-common@0.21.4-next.2
+  - @backstage/plugin-scaffolder-node@0.4.0-next.2
+  - @backstage/backend-test-utils@0.3.4-next.2
+  - @backstage/types@1.1.1
+  - @backstage/plugin-scaffolder-common@1.5.1-next.1
+
 ## 0.1.0-next.1
 
 ### Patch Changes

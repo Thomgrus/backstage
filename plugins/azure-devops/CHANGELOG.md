@@ -1,5 +1,20 @@
 # @backstage/plugin-azure-devops
 
+## 0.4.0-next.2
+
+### Patch Changes
+
+- Updated dependencies
+  - @backstage/plugin-catalog-react@1.10.1-next.2
+  - @backstage/core-compat-api@0.2.1-next.1
+  - @backstage/catalog-model@1.4.5-next.0
+  - @backstage/core-components@0.14.1-next.1
+  - @backstage/core-plugin-api@1.9.1-next.1
+  - @backstage/errors@1.2.4-next.0
+  - @backstage/frontend-plugin-api@0.6.1-next.1
+  - @backstage/plugin-azure-devops-common@0.4.0-next.1
+  - @backstage/plugin-permission-react@0.4.21-next.1
+
 ## 0.4.0-next.1
 
 ### Minor Changes
